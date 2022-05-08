@@ -7,8 +7,14 @@ from tensorflow.keras.models import load_model
 from keras.preprocessing.image import img_to_array
 import scipy.special
 import math
+import sys
 
 # PROBLEMS WITH ORDERING FROM WHITEBOARD, MAYBE ASK THE USER TO ONLY TAKE A PICTURE OF THE BRACKETS IF IT DOESNT WORK
+
+print("What formula would you like to solve (binomial, quadratic): ")
+formula = input()
+print("What surface did you write on (paper, whiteboard): ")
+surface = input()
 
 # This is only meant for one occurence of these chars
 def getDataBetweenChar(firstChar,finalChar, string):
@@ -97,7 +103,8 @@ def CalculateX(values, string):
 # Construct the argument parser and parse the arguments
 ap = argparse.ArgumentParser()
 ap.add_argument("-i", "--image", required=True, help="Path to the image")
-ap.add_argument("-m", "--model", required=True, help="Path to the pre-trained model")
+ap.add_argument("-bm", "--binmodel", required=True, help="Path to the pre-trained bin model")
+ap.add_argument("-qm", "--quadmodel", required=True, help="Path to the pre-trained quad model")
 args = vars(ap.parse_args())
 
 ###############################################
@@ -122,7 +129,11 @@ cv2.imshow("License Plate", image)
 blurred = cv2.GaussianBlur(gray, (5, 5), 0)
 
 # apply adaptive thresholding
-thresh = cv2.adaptiveThreshold(blurred, 255,
+if formula == "binomial" and surface == "paper":
+    thresh = cv2.adaptiveThreshold(blurred, 255,
+        cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY_INV, 75, 5)
+else:
+    thresh = cv2.adaptiveThreshold(blurred, 255,
 	cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY_INV, 255, 5)
 # TEST FOR WHITEBOARD
 # 75 for whiteboard seems to be better than 45, setting it to 255 seems to give even better results on img 5, however order of chars is wrong though
@@ -198,7 +209,7 @@ by_line = []
 
 # Assign a line number to each contour
 for x, y, w, h in by_y:
-    if y > line_y + max_height:
+    if y > line_y + max_height + (150):
     # if y > line_y + max_height*2:
     # Works quite good but is hardcoded
     # if y > line_y + max_height+(max_height/4):
@@ -229,12 +240,16 @@ TARGET_HEIGHT = 128
 #     ]
 
 # the labels
-chars = [
+quadChars = [
     '0','1','2','3','4','5','6','7','8','9','-','+','x'
+    ]
+binChars = [
+    '0','1','2','3','4','5','6','7','8','9','-','(',')'
     ]
     
 # Load the pre-trained convolutional neural network
-model = load_model(args["model"], compile=False)
+quadmodel = load_model(args["quadmodel"], compile=False)
+binmodel = load_model(args["binmodel"], compile=False)
 
 vehicle_plate = ""
 # Loop over the bounding boxes
@@ -290,11 +305,21 @@ for rect in boundingBoxes:
     crop = np.expand_dims(crop, axis=0)
 
     #Make prediction
-    prob = model.predict(crop)[0]
+    if formula == "quadratic":
+        prob = quadmodel.predict(crop)[0]
+    elif formula == "binomial":
+        prob = binmodel.predict(crop)[0]
+    else:
+        print("incorrect formula type")
+        sys.exit(0)
     idx = np.argsort(prob)[-1]
     print(idx)
-    vehicle_plate += chars[idx]
-    prediction = chars[idx]
+    if formula == "quadratic":
+        vehicle_plate += quadChars[idx]
+        prediction = quadChars[idx]
+    elif formula == "binomial":
+        vehicle_plate += binChars[idx]
+        prediction = binChars[idx]
 
 
     # Show bounding box and prediction on image
@@ -303,10 +328,7 @@ for rect in boundingBoxes:
 
 # Show final image
 cv2.imshow('Final', image)
-print("Vehicle plate: " + vehicle_plate)
-
-print("What formula would you like to solve (binomial, quadratic): ")
-formula = input()
+print("Solution: " + vehicle_plate)
 if formula == "quadratic":
     values = getQuadVals(vehicle_plate)
     CalculateX(values, vehicle_plate)
